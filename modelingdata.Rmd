@@ -1,0 +1,281 @@
+---
+title: "capstonemodeling"
+output: html_document
+---
+```{r}
+install.packages("caret")
+library(dplyr)
+library(caret)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+```
+
+```{r}
+listing= read.csv('/Users/leizeng/Desktop/capstone project/datasets/clean_listing.csv',stringsAsFactors = T )
+head(listing)
+```
+```{r}
+levels(listing$last_review)
+```
+
+```{r}
+listingnum=
+  listing %>%
+  select(-c('reviews_per_month','last_review','neighbourhood_group','neighbourhood_group','room_type'))
+
+```
+
+
+
+
+```{r}
+#first model:linear regression
+library(caret)
+set.seed(1009)
+split = createDataPartition(y=listing$price,p = 0.8,list = F,groups = 100)
+train = listingnum[split,]
+test = listingnum[-split,]
+```
+
+```{r}
+#first model:linear regression
+model1=lm(price~availability_365+latitude+minimum_nights,data=train)
+```
+
+```{r}
+summary(model1)
+```
+
+```{r}
+pred = predict(model1)
+rmse1 = sqrt(mean((pred-train$price)^2)); rmse1
+```
+```{r}
+mape = mean(abs(((pred - train$price)/train$price)*100)); mape
+```
+
+
+```{r}
+sse1 = sum((pred - train$price)^2)
+sst1 = sum((mean(train$price)-train$price)^2)
+model1_r2 = 1 - sse1/sst1; model1_r2
+```
+
+```{r}
+ggplot(aes(x=availability_365,y=price),data=train)+
+  geom_point()+
+  geom_smooth(method="lm", formula=y~poly(x,2),size=1.3,se=FALSE, color='steelblue3')+
+  coord_cartesian(ylim = c(1,200))
+```
+
+```{r}
+#predict:out of sample
+pred = predict(model1, newdata=test)
+sse1_test = sum((pred - test$price)^2)
+sst1_test = sum((mean(train$price)-test$price)^2)
+model1_r2_test = 1 - sse1_test/sst1_test; model1_r2_test
+```
+```{r}
+rmse1_test = sqrt(mean((pred-test$price)^2)); rmse1_test
+```
+
+```{r}
+#feature selection
+round(cor(train),2)
+```
+
+
+```{r}
+library(corrplot)
+corrplot(cor(train),methods='square',type='lower',diag=F)
+```
+```{r}
+#ridge
+install.packages('glmnet')
+#install.packages("Matrix")
+library(glmnet)
+library(Matrix)
+x = model.matrix(price~.-1,data=train)
+y = train$price
+ridgeModel = glmnet(x,y,alpha=0)
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+#now we try something else model to redue rmse
+
+#first in first solit data
+
+set.seed(617)
+split = sample(1:nrow(listing),size = nrow(listing)*0.8)
+train1 = listing[split,]
+test1 = listing[-split,]
+```
+
+
+
+```{r}
+# now we will use tree to analysis 
+# CART Models
+
+#default tree
+library(rpart)
+library(rpart.plot)
+tree = rpart(price~.,data=train1)
+pred2 = predict(tree,newdata=test1)
+rmse_tree = sqrt(mean((pred2-test1$price)^2)); rmse_tree
+```
+```{r}
+mape = mean(abs(((pred2 - test1$price)/test1$price)*100)); mape
+```
+
+
+```{r}
+#maximal tree
+maximalTree = rpart(price~.,data=train1,control=rpart.control(cp=0))
+pred3 = predict(maximalTree,newdata=test1)
+rmse_maximalTree = sqrt(mean((pred3-test1$price)^2)); rmse_maximalTree
+
+#we can tell from rmse, this is not good result, so we need to find out which cp is best tune
+```
+
+```{r}
+#Tree with Tuning
+library(caret)
+trControl = trainControl(method='cv',number = 5)
+tuneGrid = expand.grid(.cp = seq(from = 0.001,to = 0.1,by = 0.001))
+set.seed(617)
+cvModel = train(price~.,
+                data=train1,
+                method="rpart",
+                trControl = trControl,
+                tuneGrid = tuneGrid)
+
+cvModel$results
+
+```
+```{r}
+library(ggplot2)
+ggplot(data=cvModel$results, aes(x=cp, y=RMSE))+
+  geom_line(size=0.5,alpha=0.2)+
+  geom_point(color='brown')+
+  theme_bw()+
+  ggtitle(label=paste('Lowest RMSE is at a cp of ',cvModel$bestTune$cp))
+```
+
+```{r}
+#best tuned
+cvTree = rpart(price~.,data=train1,cp = cvModel$bestTune$cp)
+pred4 = predict(cvTree,newdata=test1)
+rmse_cvTree = sqrt(mean((pred4-test1$price)^2)); rmse_cvTree
+```
+
+```{r}
+#install.packages('rpart.plot')
+library(rpart.plot)
+rpart.plot(cvTree)
+```
+
+
+
+```{r}
+#booststrapping model
+#bag model
+library(randomForest)
+set.seed(617)
+bag = randomForest(price~.,data=train1,mtry = ncol(train)-1,ntree=1000)
+pred5 = predict(bag,newdata=test1)
+rmse_bag = sqrt(mean((pred5-test1$price)^2)); rmse_bag
+```
+
+
+```{r}
+library(randomForest)
+set.seed(617)
+bag = randomForest(price~.,
+                   data=train1,
+                   ntree=100,
+                   mtry=ncol(train1)-1 )
+bag
+```
+```{r}
+plot(bag)
+```
+
+
+```{r}
+pred4 = predict(cvTree,newdata=test1)
+rmse_cvTree = sqrt(mean((pred4-test1$price)^2)); rmse_cvTree
+```
+
+
+```{r}
+?randomForest
+```
+
+
+
+```{r}
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("randomForest")
+
+```
+
+```{r}
+#random forest
+library(randomForest)
+set.seed(617)
+bag = randomForest(price~.,
+                   data=train1,
+                   ntree=100,
+                   mtry=3 )
+```
+
+```{r}
+rfNews()
+```
+
+```{r}
+pred = predict(bag,newdata=test1)
+rmse_forest = sqrt(mean((pred-test1$price)^2)); rmse_forest
+```
+
+```{r}
+#tune forest,find best mtry value
+library(rpart); library(rpart.plot); library(caret)
+trControl=trainControl(method = 'cv', number=5)
+tuneGrid=expand.grid(mtry=1:3 )
+set.seed(1031)
+cvForest=train(price~.,
+               data=train1,
+               method='rf',
+               trControl=trControl,
+               tuneGrid=tuneGrid)
+cvForest$bestTune
+```
+```{r}
+library(randomForest)
+set.seed(1031)
+forest=randomForest(price~.,
+                    data=train1,
+                    ntree=100,
+                    mtry=cvForest$bestTune$mtry)
+pred=predict(forest,newdata=test1)
+rmse_forest=sqrt(mean((pred-test1$price)^2)); 
+rmse_forest
+```
+
+```{r}
+
+```
+

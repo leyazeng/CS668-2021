@@ -1,0 +1,123 @@
+---
+title: "capstoneR"
+output: html_document
+---
+
+```{r}
+data = read.csv('/Users/leizeng/Desktop/capstone project/datasets/a/listings-2.csv',stringsAsFactors = T )
+data
+```
+```{r}
+library(dplyr)
+library(caret)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(stringr)
+```
+
+
+```{r}
+#explore the var
+summary(data)
+#from the summary we can see the reviiew_per_month have a lot of null value
+```
+
+```{r}
+data$reviews_per_month
+```
+
+
+```{r}
+#now i separte the datasets to numeric and categorical 
+
+num_data=
+  data%>%
+  select(c('id','host_id','latitude','longitude','price','minimum_nights','number_of_reviews','last_review','reviews_per_month','calculated_host_listings_count','availability_365'))
+```
+
+```{r}
+#handle with outlier
+outlier_to_na = 
+  function(x){
+  x[x>mean(x)+2*sd(x)|x<mean(x)-2*sd(x)] = NA
+  x
+}
+
+apply(num_data,MARGIN = 2,FUN = function(x) outlier_to_na(x))
+```
+
+
+
+
+```{r}
+#now i find out there is review per month is na 
+#impute missing value
+missingdata_num=num_data[,c(6,9)]
+library(mice)
+imputed_data_num=complete(mice(missingdata_num))
+```
+
+```{r}
+summary(imputed_data_num)
+```
+
+```{r}
+temp_num=
+  num_data%>%
+  select(-c('minimum_nights','reviews_per_month'))
+  
+  
+```
+
+```{r}
+#put all numeric together
+clean_num=data.frame(imputed_data_num,temp_num)
+clean_num
+
+```
+```{r}
+#correlations num
+library(corrplot)
+numericvarb= which(sapply(clean_num, is.numeric)) 
+numericvarb
+```
+
+```{r}
+all_numVar=clean_num[, numericvarb]
+cor_numVar = cor(all_numVar, use="pairwise.complete.obs")
+```
+
+```{r}
+#correlation list about price
+cor_sorted = as.matrix(sort(cor_numVar[,'price'], decreasing = TRUE))
+print(cor_sorted)
+```
+
+```{r}
+table(data$room_type)
+```
+
+
+```{r}
+#deal with categorial
+Catedata=
+  data%>%
+  select(c('neighbourhood_group','room_type'))
+  
+```
+
+```{r}
+head(data)
+```
+```{r}
+cleanlisting=data.frame(clean_num,Catedata)
+```
+```{r}
+cleanlisting
+```
+
+```{r}
+write.csv(cleanlisting, "clean_listing.csv",row.names = F)
+```
+
